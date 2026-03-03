@@ -33,12 +33,12 @@ const db = new sqlite3.Database(dbPath, (err) => {
 function initDatabase() {
   const sql = `
     CREATE TABLE IF NOT EXISTS books (
-      id INTEGER PRIMARY KEY AUTOINCREMENT,
+      id TEXT PRIMARY KEY,
       title TEXT NOT NULL,
       author TEXT,
       cover TEXT,
       intro TEXT,
-      source_url TEXT UNIQUE,
+      source_url TEXT,
       source_site TEXT,
       status TEXT DEFAULT '连载',
       total_chapters INTEGER DEFAULT 0,
@@ -48,7 +48,7 @@ function initDatabase() {
 
     CREATE TABLE IF NOT EXISTS chapters (
       id INTEGER PRIMARY KEY AUTOINCREMENT,
-      book_id INTEGER,
+      book_id TEXT,
       chapter_no INTEGER,
       title TEXT,
       content TEXT,
@@ -59,13 +59,21 @@ function initDatabase() {
 
     CREATE TABLE IF NOT EXISTS bookshelf (
       id INTEGER PRIMARY KEY AUTOINCREMENT,
-      book_id INTEGER UNIQUE,
+      book_id TEXT UNIQUE,
       current_chapter INTEGER DEFAULT 1,
       progress_percent INTEGER DEFAULT 0,
       is_favorite BOOLEAN DEFAULT 0,
       tags TEXT,
       last_read_at TIMESTAMP,
       created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+      FOREIGN KEY (book_id) REFERENCES books(id)
+    );
+
+    CREATE TABLE IF NOT EXISTS read_history (
+      id INTEGER PRIMARY KEY AUTOINCREMENT,
+      book_id TEXT,
+      chapter_no INTEGER,
+      read_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
       FOREIGN KEY (book_id) REFERENCES books(id)
     );
 
