@@ -90,8 +90,19 @@ novel-reader/
 ## 🛠️ 技术栈
 
 - **前端**: Vue 3 + Vite + TailwindCSS + Pinia
-- **后端**: Node.js + Express + SQLite3
-- **爬虫**: Axios + Cheerio（已集成全本小说网）
+- **后端**: Node.js + Express + SQLite3 (better-sqlite3)
+- **爬虫**: Axios + Cheerio
+
+## 💻 系统兼容性
+
+| 平台 | 架构 | 支持状态 |
+|------|------|----------|
+| macOS | Intel (x86_64) | ✅ 完整支持 |
+| macOS | Apple Silicon (ARM64/M1/M2/M3) | ✅ 完整支持 |
+| Linux | x86_64 / ARM64 | ✅ 支持 |
+| Windows | x86_64 | ✅ 支持 |
+
+**注意**: 使用 `better-sqlite3` 数据库，原生支持多架构，无需额外配置。（已集成全本小说网）
 
 ## 🔧 开发相关
 
