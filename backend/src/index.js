@@ -10,8 +10,16 @@ const PORT = process.env.PORT || 3000;
 app.use(cors());
 app.use(express.json());
 
+// 确保数据库目录存在
+const dbDir = path.join(__dirname, '../database');
+if (!require('fs').existsSync(dbDir)) {
+  require('fs').mkdirSync(dbDir, { recursive: true });
+}
+
 // 数据库连接
-const dbPath = path.join(__dirname, '../database/novel.db');
+const dbPath = path.join(dbDir, 'novel.db');
+console.log('数据库路径:', dbPath);
+
 const db = new sqlite3.Database(dbPath, (err) => {
   if (err) {
     console.error('数据库连接失败:', err);
@@ -87,7 +95,8 @@ app.get('/api/health', (req, res) => {
 });
 
 // API路由
-const bookRoutes = require('./routes/book');
+const { router: bookRoutes, setDatabase } = require('./routes/book');
+setDatabase(db); // 传递数据库实例
 app.use('/api', bookRoutes);
 
 // 启动服务器

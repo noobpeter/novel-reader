@@ -7,14 +7,19 @@
 
     <div class="book-detail" v-if="book">
       <div class="book-header">
-        <div class="book-cover">📘</div>
+        <div class="book-cover">{{ book.cover || '📘' }}</div>
         <div class="book-meta">
           <h2>{{ book.title }}</h2>
-          <p class="author">👤 {{ book.author }}</p>
-          <p class="status">📌 {{ book.status }}</p>
-          <p class="chapters">📚 共 {{ book.totalChapters }} 章</p>
+          <p class="author">👤 {{ book.author }} | 📌 {{ book.status }} | 📚 {{ book.totalChapters }}章</p>
+          <p class="source">来源: {{ book.sourceSite }}</p>
           <div class="actions">
-            <button @click="addToBookshelf" class="btn-primary">加入书架</button>
+            <button 
+              @click="addToShelf" 
+              class="btn-primary"
+              :disabled="isInBookshelf"
+            >
+              {{ isInBookshelf ? '已在书架' : '加入书架' }}
+            </button>
             <button @click="startReading" class="btn-secondary">开始阅读</button>
           </div>
         </div>
@@ -22,60 +27,98 @@
 
       <div class="book-intro">
         <h3>简介</h3>
-        <p>{{ book.intro }}</p>
+        <p>{{ book.intro || '暂无简介' }}</p>
       </div>
 
-      <div class="chapter-list">
-        <h3>章节目录</h3>
+      <div class="chapter-list" v-if="chapters.length > 0">
+        <h3>章节目录 ({{ chapters.length }}章)</h3>
         <div class="chapters">
           <div 
-            v-for="chapter in chapters" 
+            v-for="chapter in displayedChapters" 
             :key="chapter.id"
             class="chapter-item"
             @click="readChapter(chapter)"
           >
             <span>第{{ chapter.number }}章 {{ chapter.title }}</span>
-            <span class="chapter-status">{{ chapter.isRead ? '已读' : '' }}</span>
           </div>
         </div>
+        <button v-if="chapters.length > 10" @click="showAllChapters = !showAllChapters" class="show-more">
+          {{ showAllChapters ? '收起' : '显示全部章节' }}
+        </button>
+      </div>
+      <div v-else class="loading-chapters">
+        加载章节列表中...
       </div>
     </div>
+
+    <div v-else-if="loading" class="loading">加载中...</div>
+    <div v-else class="error">书籍不存在</div>
   </div>
 </template>
 
 <script setup>
-import { ref, onMounted } from 'vue'
+import { ref, onMounted, computed } from 'vue'
 import { useRoute, useRouter } from 'vue-router'
+import { getBookDetail, addToBookshelf, getBookshelf } from '../utils/api'
 
 const route = useRoute()
 const router = useRouter()
 const bookId = route.params.id
 
-const book = ref({
-  id: bookId,
-  title: '示例小说',
-  author: '作者名',
-  status: '连载中',
-  totalChapters: 100,
-  intro: '这是小说的简介内容...'
-})
+const book = ref(null)
+const chapters = ref([])
+const loading = ref(false)
+const isInBookshelf = ref(false)
+const showAllChapters = ref(false)
 
-const chapters = ref([
-  { id: 1, number: 1, title: '第一章标题', isRead: false },
-  { id: 2, number: 2, title: '第二章标题', isRead: false },
-  { id: 3, number: 3, title: '第三章标题', isRead: false },
-])
+const displayedChapters = computed(() => {
+  if (showAllChapters.value) return chapters.value
+  return chapters.value.slice(0, 10)
+})
 
 onMounted(() => {
-  // TODO: 加载书籍详情
+  loadBookDetail()
+  checkBookshelf()
 })
 
-const addToBookshelf = () => {
-  alert(`已添加《${book.value.title}》到书架`)
+const loadBookDetail = async () => {
+  loading.value = true
+  try {
+    const data = await getBookDetail(bookId)
+    if (data) {
+      book.value = data
+      chapters.value = data.chapters || []
+    }
+  } catch (error) {
+    console.error('获取书籍详情失败:', error)
+  } finally {
+    loading.value = false
+  }
+}
+
+const checkBookshelf = async () => {
+  try {
+    const bookshelf = await getBookshelf()
+    isInBookshelf.value = bookshelf.some(b => b.id === bookId)
+  } catch (error) {
+    console.error('检查书架失败:', error)
+  }
+}
+
+const addToShelf = async () => {
+  if (!book.value) return
+  
+  try {
+    await addToBookshelf(book.value)
+    isInBookshelf.value = true
+    alert(`《${book.value.title}》已添加到书架`)
+  } catch (error) {
+    alert('添加失败：' + error.message)
+  }
 }
 
 const startReading = () => {
-  router.push(`/reader/${bookId}`)
+  router.push(`/reader/${bookId}?chapter=1`)
 }
 
 const readChapter = (chapter) => {
@@ -114,6 +157,7 @@ const readChapter = (chapter) => {
 
 .book-cover {
   font-size: 6rem;
+  flex-shrink: 0;
 }
 
 .book-meta {
@@ -124,9 +168,10 @@ const readChapter = (chapter) => {
   margin-bottom: 15px;
 }
 
-.author, .status, .chapters {
+.author, .source {
   color: #666;
   margin-bottom: 8px;
+  font-size: 0.95rem;
 }
 
 .actions {
@@ -140,11 +185,16 @@ const readChapter = (chapter) => {
   border-radius: 20px;
   cursor: pointer;
   border: none;
+  font-size: 0.95rem;
 }
 
 .btn-primary {
   background: #2D5A4A;
   color: white;
+}
+
+.btn-primary:disabled {
+  background: #999;
 }
 
 .btn-secondary {
@@ -180,6 +230,11 @@ const readChapter = (chapter) => {
   margin-bottom: 15px;
 }
 
+.chapters {
+  max-height: 400px;
+  overflow-y: auto;
+}
+
 .chapter-item {
   display: flex;
   justify-content: space-between;
@@ -187,14 +242,30 @@ const readChapter = (chapter) => {
   padding: 12px;
   border-bottom: 1px solid #eee;
   cursor: pointer;
+  transition: background 0.3s;
 }
 
 .chapter-item:hover {
   background: #f5f5f5;
 }
 
-.chapter-status {
-  color: #2D5A4A;
-  font-size: 0.85rem;
+.show-more {
+  width: 100%;
+  padding: 12px;
+  margin-top: 10px;
+  background: #f0f0f0;
+  border: none;
+  border-radius: 8px;
+  cursor: pointer;
+}
+
+.loading, .error, .loading-chapters {
+  text-align: center;
+  padding: 60px;
+  color: #999;
+}
+
+.error {
+  color: #ff4444;
 }
 </style>
