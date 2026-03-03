@@ -10,17 +10,31 @@
       <button @click="viewMode = 'list'" :class="{ active: viewMode === 'list' }">☰ 列表</button>
     </div>
 
-    <div class="book-list" :class="viewMode">
-      <div v-for="book in books" :key="book.id" class="book-item" @click="readBook(book)">
-        <div class="book-cover">📗</div>
+    <div class="book-list" :class="viewMode" v-if="books.length > 0">
+      <div 
+        v-for="book in books" 
+        :key="book.id" 
+        class="book-item" 
+        @click="readBook(book)"
+      >
+        <div class="book-cover">{{ book.cover || '📗' }}</div>
         <div class="book-info">
           <h3>{{ book.title }}</h3>
-          <p>{{ book.author }}</p>
+          <p class="author">{{ book.author }}</p>
           <div class="progress-bar">
             <div class="progress" :style="{ width: book.progress + '%' }"></div>
           </div>
-          <p class="progress-text">已读 {{ book.progress }}%</p>
+          <p class="progress-text">
+            读到第{{ book.currentChapter || 1 }}章 · {{ book.progress || 0 }}%
+          </p>
         </div>
+        <button 
+          class="delete-btn" 
+          @click.stop="removeBook(book.id)"
+          title="从书架移除"
+        >
+          ×
+        </button>
       </div>
     </div>
 
@@ -32,20 +46,44 @@
 </template>
 
 <script setup>
-import { ref } from 'vue'
+import { ref, onMounted } from 'vue'
 import { useRouter } from 'vue-router'
+import { getBookshelf, removeFromBookshelf } from '../utils/api'
 
 const router = useRouter()
 const viewMode = ref('grid')
+const books = ref([])
+const loading = ref(false)
 
-// TODO: 从本地存储获取书架数据
-const books = ref([
-  { id: 1, title: '示例小说1', author: '作者A', progress: 35 },
-  { id: 2, title: '示例小说2', author: '作者B', progress: 0 },
-])
+onMounted(() => {
+  loadBooks()
+})
+
+const loadBooks = async () => {
+  loading.value = true
+  try {
+    books.value = await getBookshelf()
+  } catch (error) {
+    console.error('获取书架失败:', error)
+    alert('获取书架失败')
+  } finally {
+    loading.value = false
+  }
+}
 
 const readBook = (book) => {
-  router.push(`/reader/${book.id}`)
+  router.push(`/reader/${book.id}?chapter=${book.currentChapter || 1}`)
+}
+
+const removeBook = async (bookId) => {
+  if (!confirm('确定要从书架移除这本书吗？')) return
+  
+  try {
+    await removeFromBookshelf(bookId)
+    books.value = books.value.filter(b => b.id !== bookId)
+  } catch (error) {
+    alert('移除失败：' + error.message)
+  }
 }
 </script>
 
@@ -106,12 +144,14 @@ const readBook = (book) => {
   border-radius: 12px;
   padding: 15px;
   cursor: pointer;
-  transition: transform 0.3s;
+  transition: all 0.3s;
   box-shadow: 0 2px 8px rgba(0,0,0,0.1);
+  position: relative;
 }
 
 .book-item:hover {
   transform: translateY(-5px);
+  box-shadow: 0 5px 15px rgba(0,0,0,0.15);
 }
 
 .book-cover {
@@ -125,9 +165,10 @@ const readBook = (book) => {
   margin-bottom: 5px;
 }
 
-.book-info p {
+.author {
   font-size: 0.85rem;
   color: #666;
+  margin-bottom: 10px;
 }
 
 .progress-bar {
@@ -148,6 +189,27 @@ const readBook = (book) => {
 .progress-text {
   font-size: 0.8rem;
   color: #999;
+}
+
+.delete-btn {
+  position: absolute;
+  top: 10px;
+  right: 10px;
+  width: 24px;
+  height: 24px;
+  border-radius: 50%;
+  border: none;
+  background: #ff4444;
+  color: white;
+  font-size: 16px;
+  line-height: 1;
+  cursor: pointer;
+  opacity: 0;
+  transition: opacity 0.3s;
+}
+
+.book-item:hover .delete-btn {
+  opacity: 1;
 }
 
 .empty {

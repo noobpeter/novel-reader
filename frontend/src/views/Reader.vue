@@ -7,20 +7,27 @@
     </header>
 
     <div class="reader-content" @click="toggleControls">
-      <div class="chapter-title">第{{ currentChapter }}章 {{ chapterTitle }}</div>
-      <div class="content" :style="contentStyle">
-        {{ chapterContent }}
-      </div>
+      <div v-if="loading" class="loading">加载中...</div>
+      <div v-else-if="error" class="error">{{ error }}</div>
+      <template v-else>
+        <div class="chapter-title">{{ chapterTitle }}</div>
+        <div class="content" :style="contentStyle">
+          <div v-for="(paragraph, index) in paragraphs" :key="index" class="paragraph">
+            {{ paragraph }}
+          </div>
+        </div>
+      </template>
     </div>
 
     <div class="reader-footer" v-show="showControls">
-      <button @click="prevChapter" :disabled="currentChapter <= 1">← 上一章</button>
-      <span>第 {{ currentChapter }} / {{ totalChapters }} 章</span>
-      <button @click="nextChapter" :disabled="currentChapter >= totalChapters">下一章 →</button>
+      <button @click="prevChapter" :disabled="currentChapter <= 1 || loading">← 上一章</button>
+      <span>第 {{ currentChapter }} 章</span>
+      <button @click="nextChapter" :disabled="loading">下一章 →</button>
     </div>
 
     <!-- 设置面板 -->
-    <div class="settings-panel" v-if="showSettings">
+    <div class="settings-panel" v-if="showSettings" @click.stop
+>
       <div class="setting-item">
         <label>字体大小</label>
         <input type="range" v-model="fontSize" min="14" max="24" />
@@ -46,18 +53,20 @@
 </template>
 
 <script setup>
-import { ref, computed } from 'vue'
+import { ref, computed, onMounted, watch } from 'vue'
 import { useRoute, useRouter } from 'vue-router'
+import { getChapter, getBookDetail, updateProgress } from '../utils/api'
 
 const route = useRoute()
 const router = useRouter()
 
 const bookId = route.params.id
-const bookTitle = ref('示例小说')
-const currentChapter = ref(1)
-const totalChapters = ref(100)
-const chapterTitle = ref('章节标题')
-const chapterContent = ref('这是章节内容...（示例数据）')
+const bookTitle = ref('')
+const currentChapter = ref(parseInt(route.query.chapter) || 1)
+const chapterTitle = ref('')
+const chapterContent = ref('')
+const loading = ref(false)
+const error = ref('')
 const showControls = ref(true)
 const showSettings = ref(false)
 
@@ -76,6 +85,57 @@ const contentStyle = computed(() => ({
   color: currentTheme.value.color,
 }))
 
+const paragraphs = computed(() => {
+  if (!chapterContent.value) return []
+  return chapterContent.value.split('\n').filter(p => p.trim())
+})
+
+onMounted(() => {
+  loadBookInfo()
+  loadChapter()
+})
+
+const loadBookInfo = async () => {
+  try {
+    const book = await getBookDetail(bookId)
+    if (book) {
+      bookTitle.value = book.title
+    }
+  } catch (err) {
+    console.error('获取书籍信息失败:', err)
+  }
+}
+
+const loadChapter = async () => {
+  loading.value = true
+  error.value = ''
+  try {
+    const chapter = await getChapter(bookId, currentChapter.value)
+    chapterTitle.value = chapter.title || `第${currentChapter.value}章`
+    chapterContent.value = chapter.content
+    
+    // 保存阅读进度
+    await saveProgress()
+    
+    // 滚动到顶部
+    window.scrollTo(0, 0)
+  } catch (err) {
+    error.value = '加载章节失败：' + err.message
+  } finally {
+    loading.value = false
+  }
+}
+
+const saveProgress = async () => {
+  try {
+    // 计算阅读进度（简化版，假设每本书100章）
+    const progress = Math.min(Math.round((currentChapter.value / 100) * 100), 100)
+    await updateProgress(bookId, currentChapter.value, progress)
+  } catch (err) {
+    console.error('保存进度失败:', err)
+  }
+}
+
 const goBack = () => {
   router.back()
 }
@@ -92,22 +152,22 @@ const prevChapter = () => {
 }
 
 const nextChapter = () => {
-  if (currentChapter.value < totalChapters.value) {
-    currentChapter.value++
-    loadChapter()
-  }
+  currentChapter.value++
+  loadChapter()
 }
 
-const loadChapter = () => {
-  // TODO: 从后端加载章节内容
-  chapterTitle.value = `第${currentChapter.value}章标题`
-  chapterContent.value = `这是第${currentChapter.value}章的内容...`
-}
+// 监听章节变化，更新URL
+watch(currentChapter, (newVal) => {
+  router.replace({
+    path: `/reader/${bookId}`,
+    query: { chapter: newVal }
+  })
+})
 </script>
 
 <style scoped>
 .reader {
-  height: 100vh;
+  min-height: 100vh;
   display: flex;
   flex-direction: column;
 }
@@ -119,12 +179,19 @@ const loadChapter = () => {
   padding: 15px 20px;
   background: white;
   box-shadow: 0 2px 4px rgba(0,0,0,0.1);
+  position: sticky;
+  top: 0;
+  z-index: 100;
 }
 
 .reader-header h2 {
   font-size: 1.1rem;
   flex: 1;
   text-align: center;
+  margin: 0 10px;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
 }
 
 .back-btn, .settings-btn {
@@ -137,8 +204,20 @@ const loadChapter = () => {
 
 .reader-content {
   flex: 1;
-  overflow-y: auto;
   padding: 20px;
+  max-width: 800px;
+  margin: 0 auto;
+  width: 100%;
+}
+
+.loading, .error {
+  text-align: center;
+  padding: 60px;
+  color: #999;
+}
+
+.error {
+  color: #ff4444;
 }
 
 .chapter-title {
@@ -152,10 +231,14 @@ const loadChapter = () => {
 
 .content {
   line-height: 1.8;
-  text-indent: 2em;
-  min-height: 60vh;
   padding: 20px;
   border-radius: 8px;
+  min-height: 60vh;
+}
+
+.paragraph {
+  text-indent: 2em;
+  margin-bottom: 1em;
 }
 
 .reader-footer {
@@ -165,6 +248,8 @@ const loadChapter = () => {
   padding: 15px 20px;
   background: white;
   box-shadow: 0 -2px 4px rgba(0,0,0,0.1);
+  position: sticky;
+  bottom: 0;
 }
 
 .reader-footer button {
@@ -190,6 +275,7 @@ const loadChapter = () => {
   padding: 20px;
   box-shadow: 0 -4px 10px rgba(0,0,0,0.2);
   border-radius: 20px 20px 0 0;
+  z-index: 200;
 }
 
 .setting-item {
