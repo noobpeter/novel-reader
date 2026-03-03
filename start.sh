@@ -31,13 +31,20 @@ echo -e "${GREEN}✅ 环境检查通过${NC}"
 echo ""
 
 # 安装后端依赖
-if [ ! -d "backend/node_modules" ]; then
+if [ ! -d "backend/node_modules" ] || [ ! -d "backend/node_modules/better-sqlite3" ]; then
   echo "📦 安装后端依赖..."
-  cd backend && npm install && cd ..
+  cd backend
+  # 如果存在旧的sqlite3，删除后重新安装
+  if [ -d "node_modules/sqlite3" ]; then
+    echo "   检测到旧版本数据库，清理中..."
+    rm -rf node_modules package-lock.json
+  fi
+  npm install
   if [ $? -ne 0 ]; then
     echo -e "${RED}❌ 后端依赖安装失败${NC}"
     exit 1
   fi
+  cd ..
   echo -e "${GREEN}✅ 后端依赖安装完成${NC}"
   echo ""
 fi

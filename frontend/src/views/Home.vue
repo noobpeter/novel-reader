@@ -50,14 +50,18 @@
     <!-- 热门推荐 -->
     <section class="section">
       <h2>🔥 热门推荐</h2>
-      <div class="book-grid">
+      <div v-if="loadingHot" class="loading">加载中...</div>
+      <div v-else-if="hotBooks.length === 0" class="empty-tip">
+        暂无推荐书籍，去搜索看看吧
+      </div>
+      <div v-else class="book-grid">
         <div 
           v-for="book in hotBooks" 
           :key="book.id" 
           class="book-card"
           @click="viewDetail(book)"
         >
-          <div class="book-cover">{{ book.cover }}</div>
+          <div class="book-cover">📘</div>
           <div class="book-info">
             <h3>{{ book.title }}</h3>
             <p>{{ book.author }}</p>
@@ -87,19 +91,12 @@
 <script setup>
 import { ref, onMounted } from 'vue'
 import { useRouter } from 'vue-router'
-import { getBookshelf } from '../utils/api'
+import { getBookshelf, searchBooks } from '../utils/api'
 
 const router = useRouter()
 const recentBooks = ref([])
-
-const hotBooks = [
-  { id: '1', title: '斗破苍穹', author: '天蚕土豆', cover: '📕' },
-  { id: '2', title: '凡人修仙传', author: '忘语', cover: '📗' },
-  { id: '3', title: '诡秘之主', author: '爱潜水的乌贼', cover: '📘' },
-  { id: '4', title: '大奉打更人', author: '卖报小郎君', cover: '📙' },
-  { id: '5', title: '深空彼岸', author: '辰东', cover: '📓' },
-  { id: '6', title: '一念永恒', author: '耳根', cover: '📔' },
-]
+const hotBooks = ref([])
+const loadingHot = ref(false)
 
 const categories = [
   { name: '玄幻', icon: '⚔️', keyword: '玄幻' },
@@ -112,15 +109,28 @@ const categories = [
 
 onMounted(() => {
   loadRecentBooks()
+  loadHotBooks()
 })
 
 const loadRecentBooks = async () => {
   try {
     const books = await getBookshelf()
-    // 取最近阅读的3本
     recentBooks.value = books.slice(0, 3)
   } catch (error) {
     console.error('获取最近阅读失败:', error)
+  }
+}
+
+const loadHotBooks = async () => {
+  loadingHot.value = true
+  try {
+    const books = await searchBooks('修仙')
+    hotBooks.value = books.slice(0, 6)
+  } catch (error) {
+    console.error('获取热门书籍失败:', error)
+    hotBooks.value = []
+  } finally {
+    loadingHot.value = false
   }
 }
 
@@ -321,6 +331,12 @@ const searchByCategory = (keyword) => {
   font-size: 0.8rem;
   color: #888;
   margin-top: 4px;
+}
+
+.loading, .empty-tip {
+  text-align: center;
+  padding: 30px;
+  color: #999;
 }
 
 .category-grid {
