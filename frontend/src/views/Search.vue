@@ -9,7 +9,7 @@
       <input 
         v-model="keyword" 
         @keyup.enter="handleSearch"
-        placeholder="输入书名或作者，如：斗破苍穹" 
+        placeholder="输入书名或作者，如：修仙、玄幻" 
         class="search-input"
       />
       <button @click="handleSearch" class="search-btn" :disabled="searching">
@@ -61,17 +61,21 @@
       </div>
     </div>
 
-    <!-- 热门推荐 -->
+    <!-- 热门推荐 - 从真实API获取 -->
     <div class="hot-books" v-if="!hasSearched">
-      <h3>热门推荐</h3>
-      <div class="book-grid">
+      <h3>🔥 热门推荐</h3>
+      <div v-if="loadingHot" class="loading">加载中...</div>
+      <div v-else-if="hotBooks.length === 0" class="empty-tip">
+        暂无推荐，请直接搜索
+      </div>
+      <div v-else class="book-grid">
         <div 
           v-for="book in hotBooks" 
           :key="book.id" 
           class="book-card"
           @click="keyword = book.title; handleSearch()"
         >
-          <div class="cover">{{ book.cover }}</div>
+          <div class="cover">📘</div>
           <div class="title">{{ book.title }}</div>
         </div>
       </div>
@@ -91,24 +95,31 @@ const hasSearched = ref(false)
 const results = ref([])
 const bookshelf = ref([])
 const searchHistory = ref([])
-
-const hotBooks = [
-  { id: '1', title: '斗破苍穹', cover: '📕' },
-  { id: '2', title: '凡人修仙传', cover: '📗' },
-  { id: '3', title: '诡秘之主', cover: '📘' },
-  { id: '4', title: '大奉打更人', cover: '📙' },
-  { id: '5', title: '深空彼岸', cover: '📓' },
-]
+const hotBooks = ref([])
+const loadingHot = ref(false)
 
 onMounted(() => {
   loadSearchHistory()
   loadBookshelf()
+  loadHotBooks()
 })
 
 const loadSearchHistory = () => {
   const saved = localStorage.getItem('searchHistory')
   if (saved) {
-    searchHistory.value = JSON.parse(saved)
+    try {
+      const history = JSON.parse(saved)
+      // 过滤掉可能存在的mock数据关键词
+      const validKeywords = history.filter(item => 
+        item && 
+        typeof item === 'string' && 
+        item.length > 0 &&
+        item.length < 50  // 合理长度限制
+      )
+      searchHistory.value = validKeywords
+    } catch (e) {
+      searchHistory.value = []
+    }
   }
 }
 
@@ -126,6 +137,25 @@ const loadBookshelf = async () => {
     bookshelf.value = await getBookshelf()
   } catch (error) {
     console.error('获取书架失败:', error)
+    bookshelf.value = []
+  }
+}
+
+const loadHotBooks = async () => {
+  loadingHot.value = true
+  try {
+    // 从搜索API获取真实书籍作为热门推荐
+    const books = await searchBooks('修仙')
+    // 只取前5本作为热门推荐
+    hotBooks.value = books.slice(0, 5).map(book => ({
+      id: book.id,
+      title: book.title
+    }))
+  } catch (error) {
+    console.error('获取热门书籍失败:', error)
+    hotBooks.value = []
+  } finally {
+    loadingHot.value = false
   }
 }
 
@@ -138,20 +168,23 @@ const handleSearch = async () => {
   
   searching.value = true
   hasSearched.value = true
+  results.value = [] // 清空之前的结果
   
   try {
     // 保存搜索历史
-    if (!searchHistory.value.includes(keyword.value)) {
-      searchHistory.value.unshift(keyword.value)
+    const searchTerm = keyword.value.trim()
+    if (!searchHistory.value.includes(searchTerm)) {
+      searchHistory.value.unshift(searchTerm)
       if (searchHistory.value.length > 10) {
         searchHistory.value.pop()
       }
       saveSearchHistory()
     }
     
-    results.value = await searchBooks(keyword.value)
+    results.value = await searchBooks(searchTerm)
   } catch (error) {
-    alert('搜索失败：' + error.message)
+    console.error('搜索失败:', error)
+    results.value = []
   } finally {
     searching.value = false
   }
@@ -345,10 +378,16 @@ const viewDetail = (book) => {
   color: #333;
 }
 
+.loading, .empty-tip {
+  text-align: center;
+  padding: 30px;
+  color: #999;
+}
+
 .book-grid {
   display: grid;
-  grid-template-columns: repeat(auto-fill, minmax(100px, 1fr));
-  gap: 15px;
+  grid-template-columns: repeat(3, 1fr);
+  gap: 12px;
 }
 
 .book-card {
@@ -358,6 +397,7 @@ const viewDetail = (book) => {
   border-radius: 10px;
   cursor: pointer;
   transition: transform 0.3s;
+  box-shadow: 0 2px 8px rgba(0,0,0,0.08);
 }
 
 .book-card:hover {
@@ -372,5 +412,8 @@ const viewDetail = (book) => {
 .book-card .title {
   font-size: 0.85rem;
   color: #333;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
 }
 </style>
